@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="LumaWall"
-APP_BUNDLE="${APP_NAME}.app"
+APP_BUNDLE="/Applications/${APP_NAME}.app"
 CONTENTS_DIR="${APP_BUNDLE}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
@@ -12,6 +12,8 @@ SAVER_BUNDLE="${RESOURCES_DIR}/${SAVER_NAME}.saver"
 SAVER_MACOS="${SAVER_BUNDLE}/Contents/MacOS"
 SAVER_RESOURCES="${SAVER_BUNDLE}/Contents/Resources"
 
+# Remove any duplicate local build in the repo folder so Spotlight shows only one app
+rm -rf "./${APP_NAME}.app"
 rm -rf "${APP_BUNDLE}"
 mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 mkdir -p "${SAVER_MACOS}" "${SAVER_RESOURCES}"

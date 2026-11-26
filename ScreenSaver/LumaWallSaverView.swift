@@ -147,6 +147,7 @@ final class LumaWallSaverView: ScreenSaverView {
 
     override func startAnimation() {
         super.startAnimation()
+        queuePlayer?.isMuted = (config?.isMuted ?? true) || isPreview
         queuePlayer?.play()
         if let rate = config?.playbackRate, rate > 0 {
             queuePlayer?.rate = rate
@@ -154,6 +155,7 @@ final class LumaWallSaverView: ScreenSaverView {
     }
 
     override func stopAnimation() {
+        queuePlayer?.isMuted = true
         queuePlayer?.pause()
         super.stopAnimation()
     }

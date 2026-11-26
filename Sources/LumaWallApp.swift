@@ -23,11 +23,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var allowQuit = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single-instance guard: if another LumaWall is already running, ask it to open Studio and exit this duplicate
+        if let bundleID = Bundle.main.bundleIdentifier {
+            let currentPID = ProcessInfo.processInfo.processIdentifier
+            let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+                .filter { $0.processIdentifier != currentPID }
+            if !others.isEmpty {
+                if !CommandLine.arguments.contains("--background") {
+                    DistributedNotificationCenter.default().postNotificationName(
+                        NSNotification.Name("com.local.LumaWall.openStudio"),
+                        object: nil,
+                        userInfo: nil,
+                        deliverImmediately: true
+                    )
+                }
+                allowQuit = true
+                NSApp.terminate(nil)
+                return
+            }
+        }
+
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
         let startInBackground = CommandLine.arguments.contains("--background")
         NSApp.setActivationPolicy(startInBackground ? .accessory : .regular)
         setupMenuBarItem()
         _ = WallpaperEngine.shared
+
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.local.LumaWall.openStudio"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.openStudioWindow()
+            }
+        }
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willPowerOffNotification,

@@ -285,6 +285,8 @@ final class WallpaperEngine: ObservableObject {
         registerSystemObservers()
     }
 
+    private var isScreenLockedOrSaverActive = false
+
     private func registerSystemObservers() {
         let screenObs = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -297,6 +299,28 @@ final class WallpaperEngine: ObservableObject {
             }
         }
         observers.append(screenObs)
+
+        let willSleepObs = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.pauseForLockOrSaver()
+            }
+        }
+        observers.append(willSleepObs)
+
+        let screensDidSleepObs = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.pauseForLockOrSaver()
+            }
+        }
+        observers.append(screensDidSleepObs)
 
         let wakeObs = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
@@ -315,10 +339,23 @@ final class WallpaperEngine: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.isScreenLockedOrSaverActive = false
                 self?.resumeAfterUnlockOrWake()
             }
         }
         observers.append(sessionObs)
+
+        let lockObs = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.screenIsLocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isScreenLockedOrSaverActive = true
+                self?.pauseForLockOrSaver()
+            }
+        }
+        observers.append(lockObs)
 
         let unlockObs = DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name("com.apple.screenIsUnlocked"),
@@ -326,17 +363,48 @@ final class WallpaperEngine: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.isScreenLockedOrSaverActive = false
                 self?.resumeAfterUnlockOrWake()
             }
         }
         observers.append(unlockObs)
+
+        let saverStartObs = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.screensaver.didstart"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isScreenLockedOrSaverActive = true
+                self?.pauseForLockOrSaver()
+            }
+        }
+        observers.append(saverStartObs)
+
+        let saverStopObs = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.screensaver.didstop"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isScreenLockedOrSaverActive = false
+                self?.resumeAfterUnlockOrWake()
+            }
+        }
+        observers.append(saverStopObs)
+    }
+
+    private func pauseForLockOrSaver() {
+        queuePlayer?.isMuted = true
+        queuePlayer?.pause()
     }
 
     private func resumeAfterUnlockOrWake() {
-        guard activeWallpaper != nil else { return }
+        guard activeWallpaper != nil, !isScreenLockedOrSaverActive else { return }
         for window in wallpaperWindows {
             window.orderFrontRegardless()
         }
+        syncAudioState()
         syncPlaybackState()
     }
 
@@ -347,8 +415,8 @@ final class WallpaperEngine: ObservableObject {
         try? fm.createDirectory(at: Self.postersDirectory, withIntermediateDirectories: true)
     }
 
-    static let supportedVideoExtensions: Set<String> = ["mp4", "mov", "m4v"]
-    static let supportedImageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "webp", "tiff", "tif"]
+    nonisolated static let supportedVideoExtensions: Set<String> = ["mp4", "mov", "m4v"]
+    nonisolated static let supportedImageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "webp", "tiff", "tif"]
 
     func addVideo(url: URL, target: WallpaperTarget = .main, setImmediately: Bool = false) {
         let sourceURL = url.standardizedFileURL

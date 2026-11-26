@@ -32,13 +32,9 @@ fi
 
 cd "${WORK_DIR}"
 chmod +x build.sh
-echo "🔨 Building ${APP_NAME} and LumaWallSaver.saver..."
-./build.sh
-
-echo "📲 Installing to ${INSTALL_DIR}/${APP_NAME}..."
+echo "🔨 Building and installing ${APP_NAME} and LumaWallSaver.saver..."
 pkill -x LumaWall 2>/dev/null || true
-rm -rf "${INSTALL_DIR}/${APP_NAME}"
-cp -R "${APP_NAME}" "${INSTALL_DIR}/${APP_NAME}"
+./build.sh
 
 echo "🚀 Launching LumaWall..."
 open "${INSTALL_DIR}/${APP_NAME}"

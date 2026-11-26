@@ -41,12 +41,27 @@ final class LumaWallSaverView: ScreenSaverView {
         loadVideo()
     }
 
+    private func resolveSaverDirectory() -> URL? {
+        let fm = FileManager.default
+        if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            let saverDir = appSupport.appendingPathComponent("LumaWall/Saver", isDirectory: true)
+            if fm.fileExists(atPath: saverDir.appendingPathComponent("saver_config.json").path) {
+                return saverDir
+            }
+        }
+        let realHomeSaver = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/LumaWall/Saver", isDirectory: true)
+        if fm.fileExists(atPath: realHomeSaver.appendingPathComponent("saver_config.json").path) {
+            return realHomeSaver
+        }
+        return Bundle(for: LumaWallSaverView.self).resourceURL
+    }
+
     private func loadVideo() {
-        let bundle = Bundle(for: LumaWallSaverView.self)
-        guard let configURL = bundle.url(forResource: "saver_config", withExtension: "json"),
-              let data = try? Data(contentsOf: configURL),
-              let decoded = try? JSONDecoder().decode(SaverConfig.self, from: data),
-              let resourcesURL = bundle.resourceURL else {
+        guard let resourcesURL = resolveSaverDirectory() else { return }
+        let configURL = resourcesURL.appendingPathComponent("saver_config.json")
+        guard let data = try? Data(contentsOf: configURL),
+              let decoded = try? JSONDecoder().decode(SaverConfig.self, from: data) else {
             return
         }
 

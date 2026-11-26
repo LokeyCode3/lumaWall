@@ -574,33 +574,17 @@ final class WallpaperEngine: ObservableObject {
     }
 
     private func syncScreenSaverBundle(with entry: VideoEntry) {
-        guard let templateURL = Bundle.main.url(forResource: "LumaWallSaver", withExtension: "saver") else {
-            return
-        }
-
         let fm = FileManager.default
-        let destURL = installedScreenSaverURL
-        let parentDir = destURL.deletingLastPathComponent()
-        try? fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
 
-        if !fm.fileExists(atPath: destURL.path) {
+        // Install LumaWallSaver.saver ONLY if it doesn't exist yet (never modify/re-sign in place,
+        // because changing its code signature causes macOS to reset Custom Screen Saver to Monterey/Automatic).
+        let destURL = installedScreenSaverURL
+        if !fm.fileExists(atPath: destURL.path),
+           let templateURL = Bundle.main.url(forResource: "LumaWallSaver", withExtension: "saver") {
+            let parentDir = destURL.deletingLastPathComponent()
+            try? fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
             try? fm.copyItem(at: templateURL, to: destURL)
         }
-
-        let resourcesDir = destURL.appendingPathComponent("Contents/Resources", isDirectory: true)
-        try? fm.createDirectory(at: resourcesDir, withIntermediateDirectories: true)
-
-        // Remove any previous active_video.* files
-        if let items = try? fm.contentsOfDirectory(at: resourcesDir, includingPropertiesForKeys: nil) {
-            for item in items where item.lastPathComponent.hasPrefix("active_video.") {
-                try? fm.removeItem(at: item)
-            }
-        }
-
-        let ext = entry.storedURL.pathExtension.isEmpty ? "mp4" : entry.storedURL.pathExtension.lowercased()
-        let activeVideoName = "active_video.\(ext)"
-        let destVideoURL = resourcesDir.appendingPathComponent(activeVideoName)
-        try? fm.copyItem(at: entry.storedURL, to: destVideoURL)
 
         struct SaverConfigPayload: Codable {
             var videoFileName: String
@@ -615,6 +599,8 @@ final class WallpaperEngine: ObservableObject {
             var playbackRate: Float
         }
 
+        let ext = entry.storedURL.pathExtension.isEmpty ? "mp4" : entry.storedURL.pathExtension.lowercased()
+        let activeVideoName = "active_video.\(ext)"
         let insets = entry.cropInsets ?? .zero
         let payload = SaverConfigPayload(
             videoFileName: activeVideoName,
@@ -629,17 +615,33 @@ final class WallpaperEngine: ObservableObject {
             playbackRate: playbackRate
         )
 
-        let configURL = resourcesDir.appendingPathComponent("saver_config.json")
-        if let data = try? JSONEncoder().encode(payload) {
-            try? data.write(to: configURL, options: .atomic)
-        }
+        guard let configData = try? JSONEncoder().encode(payload) else { return }
 
-        // Re-sign ad-hoc so legacyScreenSaver accepts the updated bundle resources
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        task.arguments = ["--force", "--deep", "--sign", "-", destURL.path]
-        try? task.run()
-        task.waitUntilExit()
+        // Write media + config into Application Support AND legacyScreenSaver's sandbox container
+        let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first!
+        let targetDirs: [URL] = [
+            Self.appSupportDirectory.appendingPathComponent("Saver", isDirectory: true),
+            library.appendingPathComponent("Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Application Support/LumaWall/Saver", isDirectory: true)
+        ]
+
+        for dir in targetDirs {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+
+            if let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                for item in items where item.lastPathComponent.hasPrefix("active_video.") {
+                    try? fm.removeItem(at: item)
+                }
+            }
+
+            let destMediaURL = dir.appendingPathComponent(activeVideoName)
+            // Hardlink first (instant, 0 extra disk space), fallback to copy
+            if (try? fm.linkItem(at: entry.storedURL, to: destMediaURL)) == nil {
+                try? fm.copyItem(at: entry.storedURL, to: destMediaURL)
+            }
+
+            let configURL = dir.appendingPathComponent("saver_config.json")
+            try? configData.write(to: configURL, options: .atomic)
+        }
     }
 
     func clearWallpaper() {

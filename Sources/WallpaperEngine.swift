@@ -216,9 +216,8 @@ final class WallpaperEngine: ObservableObject {
         didSet {
             UserDefaults.standard.set(scaleMode.rawValue, forKey: Keys.scaleMode)
             layoutPlayerLayers()
-            if let lockEntry = lockScreenWallpaper {
-                syncSystemDesktopAndLockScreen(for: lockEntry)
-                if isScreenSaverInstalled { syncScreenSaverBundle(with: lockEntry) }
+            if let lockEntry = lockScreenWallpaper, isScreenSaverInstalled {
+                syncScreenSaverBundle(with: lockEntry)
             }
         }
     }
@@ -236,9 +235,6 @@ final class WallpaperEngine: ObservableObject {
             UserDefaults.standard.set(applyToAllDisplays, forKey: Keys.allDisplays)
             if activeWallpaper != nil {
                 rebuildWallpaperWindows()
-            }
-            if let lockEntry = lockScreenWallpaper {
-                syncSystemDesktopAndLockScreen(for: lockEntry)
             }
         }
     }
@@ -832,7 +828,10 @@ final class WallpaperEngine: ObservableObject {
 
         if let lockID = defaults.string(forKey: Keys.lockScreenID),
            let lockEntry = recentVideos.first(where: { $0.id == lockID }) {
-            applyLockScreenWallpaper(lockEntry)
+            // Restore Lock Screen state without re-invoking setDesktopImageURL on every launch
+            // (calling setDesktopImageURL resets macOS's Custom Screen Saver back to Automatic).
+            lockScreenWallpaper = lockEntry
+            selectedLockVideo = lockEntry
         }
     }
 

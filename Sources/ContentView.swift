@@ -181,24 +181,32 @@ struct ContentView: View {
 
     private var headerBar: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.13, green: 0.83, blue: 0.93),
-                                Color(red: 0.55, green: 0.36, blue: 0.96)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+            if let logoURL = Bundle.main.url(forResource: "logo", withExtension: "png"),
+               let logoImage = NSImage(contentsOf: logoURL) {
+                Image(nsImage: logoImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 36, height: 36)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .shadow(color: Color(red: 0.66, green: 0.33, blue: 0.97).opacity(0.45), radius: 8, y: 2)
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.13, green: 0.83, blue: 0.93),
+                                    Color(red: 0.55, green: 0.36, blue: 0.96)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 34, height: 34)
-                    .shadow(color: Color(red: 0.13, green: 0.83, blue: 0.93).opacity(0.45), radius: 8, y: 2)
-
-                Image(systemName: "sparkles.tv.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+                        .frame(width: 34, height: 34)
+                    Image(systemName: "sparkles.tv.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                }
             }
 
             VStack(alignment: .leading, spacing: 1) {

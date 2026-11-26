@@ -17,6 +17,8 @@ mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 mkdir -p "${SAVER_MACOS}" "${SAVER_RESOURCES}"
 
 cp Info.plist "${CONTENTS_DIR}/Info.plist"
+cp Assets/AppIcon.icns "${RESOURCES_DIR}/AppIcon.icns"
+cp Assets/logo.png "${RESOURCES_DIR}/logo.png"
 cp ScreenSaver/Info.plist "${SAVER_BUNDLE}/Contents/Info.plist"
 
 # Build Screen Saver bundle

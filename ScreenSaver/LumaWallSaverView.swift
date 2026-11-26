@@ -44,19 +44,15 @@ final class LumaWallSaverView: ScreenSaverView {
 
     private func resolveSaverDirectory() -> URL? {
         let fm = FileManager.default
-        // Inside legacyScreenSaver's sandbox, FileManager.homeDirectoryForCurrentUser points to the container;
-        // getpwuid(getuid()) gives the real user home directory (/Users/<name>).
+        let sharedSaver = URL(fileURLWithPath: "/Users/Shared/LumaWall/Saver", isDirectory: true)
+        if fm.fileExists(atPath: sharedSaver.appendingPathComponent("saver_config.json").path) {
+            return sharedSaver
+        }
         if let pw = getpwuid(getuid()), let homePtr = pw.pointee.pw_dir {
             let realHome = URL(fileURLWithPath: String(cString: homePtr), isDirectory: true)
             let realSaver = realHome.appendingPathComponent("Library/Application Support/LumaWall/Saver", isDirectory: true)
             if fm.fileExists(atPath: realSaver.appendingPathComponent("saver_config.json").path) {
                 return realSaver
-            }
-        }
-        if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            let saverDir = appSupport.appendingPathComponent("LumaWall/Saver", isDirectory: true)
-            if fm.fileExists(atPath: saverDir.appendingPathComponent("saver_config.json").path) {
-                return saverDir
             }
         }
         return Bundle(for: LumaWallSaverView.self).resourceURL
@@ -75,7 +71,10 @@ final class LumaWallSaverView: ScreenSaverView {
 
         self.config = decoded
 
-        if decoded.isImage == true, let nsImage = NSImage(contentsOf: videoURL) {
+        // Always show poster backing layer immediately so preview/startup is never black
+        let posterURL = resourcesURL.appendingPathComponent("saver_poster.jpg")
+        let fallbackImageURL = decoded.isImage == true ? videoURL : posterURL
+        if let nsImage = NSImage(contentsOf: fallbackImageURL) {
             var rect = NSRect(origin: .zero, size: nsImage.size)
             if let cgImage = nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil) {
                 let imgLayer = CALayer()
@@ -86,6 +85,9 @@ final class LumaWallSaverView: ScreenSaverView {
                 layer?.addSublayer(imgLayer)
                 self.imageLayer = imgLayer
             }
+        }
+
+        if decoded.isImage == true {
             return
         }
 

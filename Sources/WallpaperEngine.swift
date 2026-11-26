@@ -172,6 +172,10 @@ enum BorderCropDetector {
 final class WallpaperEngine: ObservableObject {
     static let shared = WallpaperEngine()
 
+    nonisolated static var sharedSaverDirectory: URL {
+        URL(fileURLWithPath: "/Users/Shared/LumaWall/Saver", isDirectory: true)
+    }
+
     nonisolated static var appSupportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return base.appendingPathComponent("LumaWall", isDirectory: true)
@@ -617,24 +621,27 @@ final class WallpaperEngine: ObservableObject {
 
         guard let configData = try? JSONEncoder().encode(payload) else { return }
 
-        // Write media + config into ~/Library/Application Support/LumaWall/Saver
+        // Write media + config + poster into /Users/Shared/LumaWall/Saver (readable by legacyScreenSaver sandbox)
         let targetDirs: [URL] = [
+            Self.sharedSaverDirectory,
             Self.appSupportDirectory.appendingPathComponent("Saver", isDirectory: true)
         ]
 
         for dir in targetDirs {
-            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
 
             if let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
-                for item in items where item.lastPathComponent.hasPrefix("active_video.") {
+                for item in items where item.lastPathComponent.hasPrefix("active_video.") || item.lastPathComponent == "saver_poster.jpg" {
                     try? fm.removeItem(at: item)
                 }
             }
 
             let destMediaURL = dir.appendingPathComponent(activeVideoName)
-            // Hardlink first (instant, 0 extra disk space), fallback to copy
-            if (try? fm.linkItem(at: entry.storedURL, to: destMediaURL)) == nil {
-                try? fm.copyItem(at: entry.storedURL, to: destMediaURL)
+            try? fm.copyItem(at: entry.storedURL, to: destMediaURL)
+
+            if let posterURL = entry.posterURL, fm.fileExists(atPath: posterURL.path) {
+                let destPosterURL = dir.appendingPathComponent("saver_poster.jpg")
+                try? fm.copyItem(at: posterURL, to: destPosterURL)
             }
 
             let configURL = dir.appendingPathComponent("saver_config.json")

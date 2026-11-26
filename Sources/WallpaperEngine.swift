@@ -600,7 +600,7 @@ final class WallpaperEngine: ObservableObject {
     }
 
     private func loadNaturalSize(for url: URL) {
-        Task.detached(priority: .userInitiated) {
+        Task.detached(priority: .userInitiated) { [weak self] in
             let asset = AVURLAsset(url: url)
             guard let track = try? await asset.loadTracks(withMediaType: .video).first else { return }
             let size = (try? await track.load(.naturalSize)) ?? CGSize(width: 1920, height: 1080)
@@ -609,9 +609,10 @@ final class WallpaperEngine: ObservableObject {
             let displaySize = CGSize(width: abs(transformed.width), height: abs(transformed.height))
             guard displaySize.width > 0, displaySize.height > 0 else { return }
 
-            await MainActor.run {
-                WallpaperEngine.shared.activeVideoNaturalSize = displaySize
-                WallpaperEngine.shared.layoutPlayerLayers()
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.activeVideoNaturalSize = displaySize
+                self.layoutPlayerLayers()
             }
         }
     }
@@ -845,7 +846,7 @@ final class WallpaperEngine: ObservableObject {
             return
         }
 
-        Task.detached(priority: .utility) {
+        Task.detached(priority: .utility) { [weak self] in
             let asset = AVURLAsset(url: videoURL)
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
@@ -875,8 +876,8 @@ final class WallpaperEngine: ObservableObject {
             }
 
             let nsImage = NSImage(cgImage: croppedCGImage, size: NSSize(width: croppedCGImage.width, height: croppedCGImage.height))
-            await MainActor.run {
-                let engine = WallpaperEngine.shared
+            await MainActor.run { [weak self] in
+                guard let engine = self else { return }
                 engine.thumbnails[entryID] = nsImage
 
                 if let idx = engine.recentVideos.firstIndex(where: { $0.id == entryID }) {

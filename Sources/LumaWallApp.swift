@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
         NSApp.setActivationPolicy(.regular)
         setupMenuBarItem()
         _ = WallpaperEngine.shared
@@ -33,6 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 window.backgroundColor = .clear
             }
         }
+    }
+
+    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+        false
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

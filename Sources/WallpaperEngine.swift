@@ -34,8 +34,14 @@ struct VideoEntry: Identifiable, Equatable, Codable {
     let fileExtension: String
     let posterFileName: String?
     var cropInsets: CropInsets?
+    var isImage: Bool?
 
     var name: String { displayName }
+
+    var mediaIsImage: Bool {
+        if let isImage { return isImage }
+        return ["jpg", "jpeg", "png", "heic", "webp", "tiff", "tif"].contains(fileExtension.lowercased())
+    }
 
     var storedURL: URL {
         WallpaperEngine.videosDirectory.appendingPathComponent(storedFileName)
@@ -341,6 +347,9 @@ final class WallpaperEngine: ObservableObject {
         try? fm.createDirectory(at: Self.postersDirectory, withIntermediateDirectories: true)
     }
 
+    static let supportedVideoExtensions: Set<String> = ["mp4", "mov", "m4v"]
+    static let supportedImageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "webp", "tiff", "tif"]
+
     func addVideo(url: URL, target: WallpaperTarget = .main, setImmediately: Bool = false) {
         let sourceURL = url.standardizedFileURL
         guard FileManager.default.fileExists(atPath: sourceURL.path) else { return }
@@ -349,6 +358,7 @@ final class WallpaperEngine: ObservableObject {
 
         let id = UUID().uuidString
         let ext = sourceURL.pathExtension.isEmpty ? "mp4" : sourceURL.pathExtension.lowercased()
+        let isImageFile = Self.supportedImageExtensions.contains(ext)
         let displayName = sourceURL.deletingPathExtension().lastPathComponent
         let storedFileName = "\(id).\(ext)"
         let destinationURL = Self.videosDirectory.appendingPathComponent(storedFileName)
@@ -366,7 +376,8 @@ final class WallpaperEngine: ObservableObject {
             displayName: displayName,
             fileExtension: ext.uppercased(),
             posterFileName: posterFileName,
-            cropInsets: nil
+            cropInsets: nil,
+            isImage: isImageFile
         )
 
         switch target {
@@ -418,6 +429,11 @@ final class WallpaperEngine: ObservableObject {
     }
 
     func applyWallpaper(_ entry: VideoEntry) {
+        guard !entry.mediaIsImage else {
+            // Images belong to Lock Screen; if applied directly, route to Lock Screen
+            applyLockScreenWallpaper(entry)
+            return
+        }
         guard FileManager.default.fileExists(atPath: entry.storedURL.path) else { return }
         activeWallpaper = entry
         selectedVideo = entry
@@ -520,6 +536,7 @@ final class WallpaperEngine: ObservableObject {
 
         struct SaverConfigPayload: Codable {
             var videoFileName: String
+            var isImage: Bool
             var scaleMode: String
             var autoCropBorders: Bool
             var top: CGFloat
@@ -533,6 +550,7 @@ final class WallpaperEngine: ObservableObject {
         let insets = entry.cropInsets ?? .zero
         let payload = SaverConfigPayload(
             videoFileName: activeVideoName,
+            isImage: entry.mediaIsImage,
             scaleMode: scaleMode.rawValue,
             autoCropBorders: autoCropBorders,
             top: insets.top,
@@ -880,6 +898,7 @@ final class WallpaperEngine: ObservableObject {
         let videoURL = entry.storedURL
         let posterURL = entry.posterURL
         let entryID = entry.id
+        let isImageFile = entry.mediaIsImage
 
         if entry.cropInsets != nil,
            let posterURL, FileManager.default.fileExists(atPath: posterURL.path),
@@ -889,20 +908,29 @@ final class WallpaperEngine: ObservableObject {
         }
 
         Task.detached(priority: .utility) { [weak self] in
-            let asset = AVURLAsset(url: videoURL)
-            let generator = AVAssetImageGenerator(asset: asset)
-            generator.appliesPreferredTrackTransform = true
-            generator.requestedTimeToleranceAfter = .zero
-            generator.requestedTimeToleranceBefore = .zero
-
-            let time = CMTime(seconds: 1.0, preferredTimescale: 600)
-            let fallbackTime = CMTime(seconds: 0.0, preferredTimescale: 600)
-
             let rawCGImage: CGImage?
-            if let img = try? await generator.image(at: time).image {
-                rawCGImage = img
+            if isImageFile {
+                if let nsImg = NSImage(contentsOf: videoURL) {
+                    var rect = NSRect(origin: .zero, size: nsImg.size)
+                    rawCGImage = nsImg.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+                } else {
+                    rawCGImage = nil
+                }
             } else {
-                rawCGImage = try? await generator.image(at: fallbackTime).image
+                let asset = AVURLAsset(url: videoURL)
+                let generator = AVAssetImageGenerator(asset: asset)
+                generator.appliesPreferredTrackTransform = true
+                generator.requestedTimeToleranceAfter = .zero
+                generator.requestedTimeToleranceBefore = .zero
+
+                let time = CMTime(seconds: 1.0, preferredTimescale: 600)
+                let fallbackTime = CMTime(seconds: 0.0, preferredTimescale: 600)
+
+                if let img = try? await generator.image(at: time).image {
+                    rawCGImage = img
+                } else {
+                    rawCGImage = try? await generator.image(at: fallbackTime).image
+                }
             }
 
             guard let rawCGImage else { return }

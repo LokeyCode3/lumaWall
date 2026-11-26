@@ -4,6 +4,7 @@ import AppKit
 
 private struct SaverConfig: Codable {
     var videoFileName: String
+    var isImage: Bool?
     var scaleMode: String
     var autoCropBorders: Bool
     var top: CGFloat
@@ -53,6 +54,19 @@ final class LumaWallSaverView: ScreenSaverView {
         guard FileManager.default.fileExists(atPath: videoURL.path) else { return }
 
         self.config = decoded
+
+        if decoded.isImage == true, let nsImage = NSImage(contentsOf: videoURL) {
+            var rect = NSRect(origin: .zero, size: nsImage.size)
+            if let cgImage = nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil) {
+                let imageLayer = CALayer()
+                imageLayer.contents = cgImage
+                imageLayer.frame = bounds
+                imageLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+                imageLayer.contentsGravity = decoded.scaleMode == "Fill" ? .resizeAspectFill : .resizeAspect
+                layer?.addSublayer(imageLayer)
+            }
+            return
+        }
 
         let asset = AVURLAsset(url: videoURL)
         let item = AVPlayerItem(asset: asset)

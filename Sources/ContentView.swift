@@ -347,13 +347,24 @@ struct ContentView: View {
 
                 if let video = selectedEntry {
                     ZStack(alignment: .bottom) {
-                        LoopPreviewPlayerView(
-                            url: video.storedURL,
-                            scaleMode: engine.scaleMode,
-                            cropInsets: engine.autoCropBorders ? (video.cropInsets ?? .zero) : .zero
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        .padding(1)
+                        if video.mediaIsImage,
+                           let img = engine.thumbnails[video.id] ?? NSImage(contentsOf: video.storedURL) {
+                            Image(nsImage: img)
+                                .resizable()
+                                .aspectRatio(contentMode: engine.scaleMode == .fill ? .fill : .fit)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                .padding(1)
+                        } else {
+                            LoopPreviewPlayerView(
+                                url: video.storedURL,
+                                scaleMode: engine.scaleMode,
+                                cropInsets: engine.autoCropBorders ? (video.cropInsets ?? .zero) : .zero
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .padding(1)
+                        }
 
                         LinearGradient(
                             colors: [Color.clear, Color.black.opacity(0.84)],
@@ -446,10 +457,10 @@ struct ContentView: View {
                             }
 
                             VStack(spacing: 3) {
-                                Text("Drop \(title) video")
+                                Text(target == .main ? "Drop \(title) video" : "Drop Lock Screen video or image")
                                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                                     .foregroundColor(.white)
-                                Text("or click to browse (MP4, MOV, M4V)")
+                                Text(target == .main ? "or click to browse (MP4, MOV, M4V)" : "or click to browse (MP4, MOV, JPG, PNG, HEIC)")
                                     .font(.system(size: 10))
                                     .foregroundColor(.white.opacity(0.5))
                             }
@@ -621,16 +632,18 @@ struct ContentView: View {
 
                     if isHovered {
                         HStack(spacing: 4) {
-                            Button(action: { engine.applyWallpaper(entry) }) {
-                                Text("Main")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 3)
-                                    .background(Color(red: 0.13, green: 0.75, blue: 0.90))
-                                    .clipShape(Capsule())
+                            if !entry.mediaIsImage {
+                                Button(action: { engine.applyWallpaper(entry) }) {
+                                    Text("Main")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(Color(red: 0.13, green: 0.75, blue: 0.90))
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
 
                             Button(action: { engine.applyLockScreenWallpaper(entry) }) {
                                 Text("Lock")
@@ -687,8 +700,10 @@ struct ContentView: View {
 
     private func pickVideoFile(for target: WallpaperTarget) {
         let panel = NSOpenPanel()
-        panel.title = target == .main ? "Choose Main Screen Video" : "Choose Lock Screen / Saver Video"
-        panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie, .movie]
+        panel.title = target == .main ? "Choose Main Screen Video" : "Choose Lock Screen Video or Image"
+        panel.allowedContentTypes = target == .main
+            ? [.mpeg4Movie, .quickTimeMovie, .movie]
+            : [.mpeg4Movie, .quickTimeMovie, .movie, .image]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
 
@@ -705,7 +720,10 @@ struct ContentView: View {
         _ = provider.loadObject(ofClass: URL.self) { url, _ in
             guard let url else { return }
             let ext = url.pathExtension.lowercased()
-            guard supportedExtensions.contains(ext) else { return }
+            let allowed = target == .main
+                ? WallpaperEngine.supportedVideoExtensions
+                : WallpaperEngine.supportedVideoExtensions.union(WallpaperEngine.supportedImageExtensions)
+            guard allowed.contains(ext) else { return }
 
             Task { @MainActor in
                 engine.addVideo(url: url, target: target, setImmediately: true)

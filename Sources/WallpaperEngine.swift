@@ -250,6 +250,12 @@ final class WallpaperEngine: ObservableObject {
             }
         }
     }
+    @Published var launchAtLogin: Bool = false {
+        didSet {
+            UserDefaults.standard.set(launchAtLogin, forKey: Keys.launchAtLogin)
+            updateLaunchAgent(enabled: launchAtLogin)
+        }
+    }
 
     private enum Keys {
         static let activeID = "lumawall.activeID"
@@ -261,6 +267,7 @@ final class WallpaperEngine: ObservableObject {
         static let autoCropBorders = "lumawall.autoCropBorders"
         static let allDisplays = "lumawall.allDisplays"
         static let syncLockScreen = "lumawall.syncLockScreen"
+        static let launchAtLogin = "lumawall.launchAtLogin"
     }
 
     private var wallpaperWindows: [NSWindow] = []
@@ -804,6 +811,7 @@ final class WallpaperEngine: ObservableObject {
         if defaults.object(forKey: Keys.syncLockScreen) != nil {
             syncLockScreen = defaults.bool(forKey: Keys.syncLockScreen)
         }
+        launchAtLogin = FileManager.default.fileExists(atPath: Self.launchAgentURL.path)
 
         if let data = try? Data(contentsOf: Self.manifestURL),
            let decoded = try? JSONDecoder().decode([VideoEntry].self, from: data) {
@@ -825,6 +833,41 @@ final class WallpaperEngine: ObservableObject {
         if let lockID = defaults.string(forKey: Keys.lockScreenID),
            let lockEntry = recentVideos.first(where: { $0.id == lockID }) {
             applyLockScreenWallpaper(lockEntry)
+        }
+    }
+
+    private static var launchAgentURL: URL {
+        let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+        return library
+            .appendingPathComponent("LaunchAgents", isDirectory: true)
+            .appendingPathComponent("com.local.LumaWall.plist")
+    }
+
+    private func updateLaunchAgent(enabled: Bool) {
+        let url = Self.launchAgentURL
+        let fm = FileManager.default
+        if !enabled {
+            try? fm.removeItem(at: url)
+            return
+        }
+
+        let dir = url.deletingLastPathComponent()
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let appsExec = "/Applications/LumaWall.app/Contents/MacOS/LumaWall"
+        let execPath = fm.fileExists(atPath: appsExec)
+            ? appsExec
+            : (Bundle.main.executablePath ?? appsExec)
+
+        let plist: [String: Any] = [
+            "Label": "com.local.LumaWall",
+            "ProgramArguments": [execPath, "--background"],
+            "RunAtLoad": true,
+            "KeepAlive": false
+        ]
+
+        if let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) {
+            try? data.write(to: url, options: .atomic)
         }
     }
 

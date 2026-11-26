@@ -556,6 +556,15 @@ struct ContentView: View {
             }
             .toggleStyle(.switch)
             .controlSize(.small)
+
+            Toggle(isOn: $engine.launchAtLogin) {
+                Text("Login")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.85))
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .help("Start LumaWall automatically in the background when you log in")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

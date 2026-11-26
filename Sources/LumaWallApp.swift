@@ -16,24 +16,38 @@ struct LumaWallApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
+    private weak var studioWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
-        NSApp.setActivationPolicy(.regular)
+        let startInBackground = CommandLine.arguments.contains("--background")
+        NSApp.setActivationPolicy(startInBackground ? .accessory : .regular)
         setupMenuBarItem()
         _ = WallpaperEngine.shared
 
-        // Style the main window for a sleek frameless glass feel
+        // Style the main window for a sleek frameless glass feel and keep it alive in background on close
         DispatchQueue.main.async {
             for window in NSApp.windows where window.canBecomeMain {
+                self.studioWindow = window
+                window.delegate = self
                 window.titlebarAppearsTransparent = true
                 window.isMovableByWindowBackground = true
                 window.backgroundColor = .clear
+                if startInBackground {
+                    window.orderOut(nil)
+                }
             }
         }
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // Hide the Studio window and switch to menu-bar-only background mode instead of closing
+        sender.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
+        return false
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
@@ -119,8 +133,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openStudioWindow() {
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        if let studioWindow {
+            studioWindow.makeKeyAndOrderFront(nil)
+            return
+        }
         for window in NSApp.windows where window.canBecomeMain {
+            self.studioWindow = window
+            window.delegate = self
             window.makeKeyAndOrderFront(nil)
             return
         }

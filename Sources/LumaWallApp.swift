@@ -44,9 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // Hide the Studio window and switch to menu-bar-only background mode instead of closing
+        // Hide the Studio window while keeping the wallpaper, Dock icon, and menu bar active
         sender.orderOut(nil)
-        NSApp.setActivationPolicy(.accessory)
         return false
     }
 
@@ -60,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
+        if studioWindow?.isVisible != true {
             openStudioWindow()
         }
         return true

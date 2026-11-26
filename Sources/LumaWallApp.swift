@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private weak var studioWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
+    private var allowQuit = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
@@ -27,6 +28,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(startInBackground ? .accessory : .regular)
         setupMenuBarItem()
         _ = WallpaperEngine.shared
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.allowQuit = true
+            }
+        }
 
         // Style the main window for a sleek frameless glass feel and keep it alive in background on close
         DispatchQueue.main.async {
@@ -51,6 +62,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if allowQuit {
+            return .terminateNow
+        }
+        // When quit from Dock or Cmd+Q, remove from Dock and keep wallpaper running in menu-bar mode
+        studioWindow?.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
+        return .terminateCancel
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -163,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func quitApp() {
+        allowQuit = true
         NSApp.terminate(nil)
     }
 }

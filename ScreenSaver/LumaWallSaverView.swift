@@ -20,6 +20,7 @@ final class LumaWallSaverView: ScreenSaverView {
     private var queuePlayer: AVQueuePlayer?
     private var playerLooper: AVPlayerLooper?
     private var playerLayer: AVPlayerLayer?
+    private var imageLayer: CALayer?
     private var naturalSize: CGSize = CGSize(width: 1920, height: 1080)
     private var config: SaverConfig?
 
@@ -43,16 +44,20 @@ final class LumaWallSaverView: ScreenSaverView {
 
     private func resolveSaverDirectory() -> URL? {
         let fm = FileManager.default
+        // Inside legacyScreenSaver's sandbox, FileManager.homeDirectoryForCurrentUser points to the container;
+        // getpwuid(getuid()) gives the real user home directory (/Users/<name>).
+        if let pw = getpwuid(getuid()), let homePtr = pw.pointee.pw_dir {
+            let realHome = URL(fileURLWithPath: String(cString: homePtr), isDirectory: true)
+            let realSaver = realHome.appendingPathComponent("Library/Application Support/LumaWall/Saver", isDirectory: true)
+            if fm.fileExists(atPath: realSaver.appendingPathComponent("saver_config.json").path) {
+                return realSaver
+            }
+        }
         if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
             let saverDir = appSupport.appendingPathComponent("LumaWall/Saver", isDirectory: true)
             if fm.fileExists(atPath: saverDir.appendingPathComponent("saver_config.json").path) {
                 return saverDir
             }
-        }
-        let realHomeSaver = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/LumaWall/Saver", isDirectory: true)
-        if fm.fileExists(atPath: realHomeSaver.appendingPathComponent("saver_config.json").path) {
-            return realHomeSaver
         }
         return Bundle(for: LumaWallSaverView.self).resourceURL
     }
@@ -73,12 +78,13 @@ final class LumaWallSaverView: ScreenSaverView {
         if decoded.isImage == true, let nsImage = NSImage(contentsOf: videoURL) {
             var rect = NSRect(origin: .zero, size: nsImage.size)
             if let cgImage = nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil) {
-                let imageLayer = CALayer()
-                imageLayer.contents = cgImage
-                imageLayer.frame = bounds
-                imageLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-                imageLayer.contentsGravity = decoded.scaleMode == "Fill" ? .resizeAspectFill : .resizeAspect
-                layer?.addSublayer(imageLayer)
+                let imgLayer = CALayer()
+                imgLayer.contents = cgImage
+                imgLayer.frame = bounds
+                imgLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+                imgLayer.contentsGravity = decoded.scaleMode == "Fill" ? .resizeAspectFill : .resizeAspect
+                layer?.addSublayer(imgLayer)
+                self.imageLayer = imgLayer
             }
             return
         }
@@ -114,6 +120,7 @@ final class LumaWallSaverView: ScreenSaverView {
 
     override func layout() {
         super.layout()
+        imageLayer?.frame = bounds
         layoutVideoLayer()
     }
 

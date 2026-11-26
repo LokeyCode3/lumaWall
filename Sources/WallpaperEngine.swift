@@ -617,11 +617,9 @@ final class WallpaperEngine: ObservableObject {
 
         guard let configData = try? JSONEncoder().encode(payload) else { return }
 
-        // Write media + config into Application Support AND legacyScreenSaver's sandbox container
-        let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first!
+        // Write media + config into ~/Library/Application Support/LumaWall/Saver
         let targetDirs: [URL] = [
-            Self.appSupportDirectory.appendingPathComponent("Saver", isDirectory: true),
-            library.appendingPathComponent("Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Application Support/LumaWall/Saver", isDirectory: true)
+            Self.appSupportDirectory.appendingPathComponent("Saver", isDirectory: true)
         ]
 
         for dir in targetDirs {
